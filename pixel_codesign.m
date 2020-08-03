@@ -20,11 +20,11 @@ area_limit = (pixel_dim)^2;
 %% design targets
 
 % except for here, as noted, all noise is squared voltage
-noise_Vrms = 5e-6;
-noise_Vsq = noise_Vrms^2;
+noise_Vrms_target = 5e-6;
+noise_Vsq_target = noise_Vrms_target^2;
 
 A_target = 100;
-A_OL_target = 1e4;
+A_OL_target = 1e3;
 A_f = 1;
 
 f_LP_AP = 10e3;
@@ -71,7 +71,7 @@ L_guard = 1e-6;
 %% closed-loop amp design: sweep Cin
 
 % assumed pseudoR based on 10fF feedback cap
-pseudoR = 320e9;
+pseudoR = 500e9;
 
 % sweep Cin
 %C_in = 1e-12;
@@ -96,7 +96,7 @@ A_elec_1e4 = C_in ./ sqrt(C_F.^2 + (C_F .* C_in .* R_elec .* (2*pi*1e4)).^2);
 
 %% plots from Cin choice
 
-% noise as a function of Cin
+% noise due to pseudoR as a function of Cin
 figure
 plot(C_in.*(1e12), sqrt(noise_pseudoR_in) .* 1e6);
 xlabel('C_{in} (pF)');
@@ -117,8 +117,12 @@ legend('300 Hz', '1kHz', '10kHz');
 title('LNA Gain Including Electrode Attenuation');
 
 %% results from first design section
+
+% baseline C_in for noise, assuming we meet target gain
 C_in = 1e-12;
 C_F = C_in / A_target;
+% now adjust C_in to pre-warp the CL gain, gain error due to finite OL gain
+C_in = C_F * A_target * (1 + 1/A_OL_target) / (1 - A_target/A_OL_target);
 % integrated pseudoR noise for 300Hz sw cap HP cutoff
 f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
 reduc_factor = 1./(1 + f_HP_AP./f_pseudo);
@@ -139,7 +143,7 @@ A_actual = C_in ./ (C_F + (C_F + C_in + C_P) ./ A_OL_target);
 noise_pseudoR_in = noise_pseudoR ./ (A_actual.^2);
 
 % noise budget
-noise_OTA = noise_Vsq - noise_pseudoR_in;
+noise_OTA = noise_Vsq_target - noise_pseudoR_in;
 
 % noise gain
 A_noise = (C_P + C_in + C_F) ./ C_in;
@@ -162,11 +166,12 @@ gm_req = 2 .* 4 .* k .* T .* gamma_W...
 % first approx of mismatch: assume input pair dominates
 sigma_Vth_1 = A_VT ./ sqrt(WL);
 V_os_3sigma = sigma_Vth_1 .* 3;
+
 %% plots from flicker noise sizing choice
 
 % noise breakdown
 figure
-semilogx(WL, (noise_Vrms*1e6).*ones(size(WL)));
+semilogx(WL, (noise_Vrms_target*1e6).*ones(size(WL)));
 hold on
 semilogx(WL, sqrt(noise_pseudoR_in) .* 1e6);
 semilogx(WL, sqrt(noise_OTA) .* 1e6);
@@ -179,7 +184,7 @@ ylabel('V_{n-RMS} (\muV)');
 axis([1e-14 1e-8 0 10]);
 legend('Budget', 'pseudoR', 'OTA', 'Flicker', 'Thermal',...
     'Flicker/A_{noise}', 'Thermal/A_{noise}');
-title('Contributors to LNA Noise (A_{OL} = 80dB)');
+title('Contributors to LNA Noise');
 
 % mismatch
 figure
@@ -194,90 +199,14 @@ semilogx(WL, gm_req.*(1e6));
 xlabel('area_{diff} (m^2)');
 ylabel('g_m (\muS)');
 axis([1e-14 1e-8 0 500]);
-title('g_m Requirement (A_{OL} = 80dB)');
+title('g_m Requirement');
 
 % closed-loop gain
 figure
 semilogx(WL, A_actual);
 xlabel('area_{diff} (m^2)');
 ylabel('A_{actual}');
-title('Closed-Loop Gain due to C_P (A_{OL} = 80dB)');
-
-%% OTA design: try again with A_OL = 60dB
-
-% try a redesign anticipating the gain error
-A_OL_target = 1e3;
-C_F = 10e-15;
-C_in = C_F * A_target * (1 + 1/A_OL_target) / (1 - A_target/A_OL_target);
-
-% transistor area, from 10^-14 m^2 to 10^-9 m^2
-% for reference, pixel is 2.33*10^-8 m^2
-% 120um/600nm device is 7.2*10^-11 m^2
-% and a 130nm/130nm device is 1.69*10^-14 m^2
-WL = logspace(-14,-8,1000);
-
-C_P = WL .* C_P_N;
-
-% resulting actual closed-loop gain
-A_actual = C_in ./ (C_F + (C_F + C_in + C_P) ./ A_OL_target);
-noise_pseudoR_in = noise_pseudoR ./ (A_actual.^2);
-
-% noise budget
-noise_OTA = noise_Vsq - noise_pseudoR_in;
-
-% noise gain
-A_noise = (C_P + C_in + C_F) ./ C_in;
-
-% flicker noise
-noise_flicker = 2 .* K_flicker_N ./ C_ox ./ WL .* (A_noise).^2 ...
-    .* log(f_LP_AP / f_HP_AP);
-
-noise_thermal = noise_OTA - noise_flicker;
-
-% thermal noise
-% NOTE: we only care about thermal noise in the signal band (to 10kHz)
-% technically, ENBW is not correct here because we can do a software
-% brickwall filter at 10kHz, and this will be valid since we have used
-% appropriate anti-aliasing.
-% thus, ENBW is used here only to provide a safety margin.
-gm_req = 2 .* 4 .* k .* T .* gamma_W...
-    ./ noise_thermal .* (A_noise).^2 .* ENBW .* excess;
-
-%% plots from flicker noise sizing choice
-
-% noise breakdown
-figure
-semilogx(WL, (noise_Vrms*1e6).*ones(size(WL)));
-hold on
-semilogx(WL, sqrt(noise_pseudoR_in) .* 1e6);
-semilogx(WL, sqrt(noise_OTA) .* 1e6);
-semilogx(WL, sqrt(noise_flicker) .* 1e6);
-semilogx(WL, sqrt(noise_thermal) .* 1e6);
-semilogx(WL, sqrt(noise_flicker) ./ (A_noise).^2 .* 1e6);
-semilogx(WL, sqrt(noise_thermal) ./ (A_noise).^2 .* 1e6);
-xlabel('area_{diff} (m^2)');
-ylabel('V_{n-RMS} (\muV)');
-axis([1e-14 1e-8 0 10]);
-legend('Budget', 'pseudoR', 'OTA', 'Flicker', 'Thermal',...
-    'Flicker/A_{noise}', 'Thermal/A_{noise}');
-title('Contributors to LNA Noise (A_{OL} = 60dB)');
-
-% gm requirement
-figure
-semilogx(WL, gm_req.*(1e6));
-xlabel('area_{diff} (m^2)');
-ylabel('g_m (\muS)');
-axis([1e-14 1e-8 0 500]);
-title('g_m Requirement (A_{OL} = 60dB)');
-
-% closed-loop gain
-figure
-semilogx(WL, A_actual);
-xlabel('area_{diff} (m^2)');
-ylabel('A_{actual}');
-title('Closed-Loop Gain due to C_P (A_{OL} = 60dB)');
-
-A_OL_target = 1e4;
+title('Closed-Loop Gain due to C_P');
 
 %% gm/id, gmro characterization
 
