@@ -13,9 +13,15 @@ k = 1.38e-23;
 T = 37 + 273;   % body temp
 
 % system constraints
+V_DD = 1.5;
 R_elec = 24e3;
 pixel_dim = 152.5e-6;
 area_limit = (pixel_dim)^2;
+
+% amplitude range
+% peak voltages for AP (300Hz - 10kHz) and a little LFP (50Hz - 10kHz)
+V_AP = 2e-3;
+V_LFP = 4e-3;
 
 %% design targets
 
@@ -37,6 +43,9 @@ settling_TCs = 5;
 
 % target for OTA noise source other than M1
 excess = 1.2;
+
+% swing for A1
+V_swing_target = V_LFP * A_target;
 
 %% technology information
 
@@ -128,7 +137,7 @@ f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
 reduc_factor = 1./(1 + f_HP_AP./f_pseudo);
 noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
 
-%% OTA design: sweep WL
+%% begin OTA design: sweep WL
 
 % transistor area, from 10^-14 m^2 to 10^-9 m^2
 % for reference, pixel is 2.33*10^-8 m^2
@@ -416,6 +425,15 @@ A_OL_CMFB_target = 20;
 
 % degen resistor headroom consumption
 V_R_degen = 0.2;
+% estimated headroom for saturation for a single device (even SI)
+V_hr_SI = 300e-3;
+V_hr_WI = 250e-3;
+
+%% swing requirement calculation
+
+V_swing_telecas = V_DD - 1*V_hr_SI - 4*V_hr_WI - V_R_degen;
+V_swing_foldcas = V_DD - 1*V_hr_SI - 3*V_hr_WI - V_R_degen;
+V_swing_stage2 = V_DD - V_hr_SI - V_hr_WI;
 
 %% amp/filter interface
 

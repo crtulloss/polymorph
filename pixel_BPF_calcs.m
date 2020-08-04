@@ -66,7 +66,7 @@ settling_frac = 0.4;
 
 %% physical constants
 k = 1.38e-23;
-T = 300;
+T = 273 + 37;
 
 %% technology information
 cap_per_area = 6.04e-15 / (2*2);    % [F/(um)^2]
