@@ -77,6 +77,27 @@ gamma_S = 2/3;
 L_diff = 200e-9;
 L_guard = 1e-6;
 
+%% pseudoR cutoff and noise
+
+% possible pseudoR values from mc: 90GOhm to 5TOhm
+pseudoR = logspace(11.25,11.77,100);
+% assume C_F is minimum size
+C_F = 10e-15;
+f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
+% reduction factor to account for not all of kT/C
+% appearing in the 300Hz+ band
+reduc_factor = 1./(1 + f_HP_AP./f_pseudo);
+noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
+% input-refer - note that this uses ideal gain
+noise_pseudoR_in = noise_pseudoR ./ (A_target.^2);
+
+% noise due to pseudoR as a function of Cin
+figure
+semilogx(pseudoR/1e9, sqrt(noise_pseudoR_in) .* 1e6);
+xlabel('R_{pseud} (G\Omega)');
+ylabel('V_{n-in-RMS} (\muV)');
+title('pseudoR Noise vs. pseudoR');
+
 %% closed-loop amp design: sweep Cin
 
 % assumed pseudoR based on 10fF feedback cap

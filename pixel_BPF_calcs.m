@@ -23,6 +23,10 @@ f_swcap = logspace(5,7,num_points)';
 %f_swcap = 480e3;
 f_HP = 300;
 f_LP = 10e3;
+% biquad filter params
+omega_0 = 2*pi*sqrt(f_HP .* f_LP);
+BW = 2*pi*(f_LP - f_HP);
+Q = omega_0 ./ BW;
 
 % mux freq
 f_mux = 32 * 30e3;
@@ -92,6 +96,28 @@ area_CT = C_L ./ cap_per_area_mos + area_sig;
 
 semilogx(f_swcap, area_CT);
 
+%% design based on CT passive second-order BPF
+
+% C_R2 will be the smallest
+C_R2 = 10e-15;
+R_2 = 1 ./ (f_swcap .* C_R2);
+% R_1 must be much smaller in order to gain unity gain in passband
+C_R1 = C_R2 .* 10;
+R_1 = 1 ./ (f_swcap .* C_R1);
+% corresponding caps
+C_1 = 1 ./ (2*pi*f_HP.*R_1);
+C_2 = 1 ./ (2*pi*f_LP.*R_2);
+
+% for differential operation, need to double shunt R and half shunt C
+C_passive = 2*C_1 + C_R1/2 + 2*C_R2 + C_2/2;
+
+% area
+area_passive = C_passive ./ cap_per_area;
+
+% plots
+semilogx(f_swcap, area_passive);
+semilogx(f_swcap, area_passive+area_CT);
+
 %% design based on CT first-order BPF (see Vol. 1 p. 185)
 
 % swcap filter cap calculations
@@ -114,11 +140,6 @@ semilogx(f_swcap, area_firstorder);
 semilogx(f_swcap, area_firstorder+area_CT);
 
 %% design based on CT biquad - TT
-
-% biquad filter params
-omega_0 = 2*pi*sqrt(f_HP .* f_LP);
-BW = 2*pi*(f_LP - f_HP);
-Q = omega_0 ./ BW;
 
 % swcap filter cap calculations
 C_RA = 10e-15;
@@ -199,6 +220,7 @@ xlabel('f_{swcap} (Hz)');
 ylabel('Capacitor Area (\mum)^2');
 title('Capacitor Area vs. Sw Cap Frequency');
 legend('Limit', 'LNA Signal Path', 'CT',...
+    'Passive', 'CT+Passive',...
     'FirstOrder', 'CT+FirstOrder',...
     'TTBiquad', 'CT+TTBiquad',...
     'HQBiquad', 'CT+HQBiquad',...
