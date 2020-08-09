@@ -91,7 +91,6 @@ f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
 ratio = f_HP_AP ./ f_pseudo;
 reduc_factor = (2/pi./((ratio).^2 - 1)) .* ...
     (ratio*pi/4 - pi/2 + atan(ratio));
-
 % resulting noise due to 2 pseudoR
 noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
 % input-refer - note that this uses ideal gain
@@ -116,9 +115,13 @@ C_F = C_in / A_target;
 
 % integrated pseudoR noise for 300Hz sw cap HP cutoff
 f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
-% reduction factor to account for not all of kT/C
-% appearing in the 300Hz+ band
-reduc_factor = 1./(1 + f_HP_AP./f_pseudo);
+% reduction factor to account for not all of kT/C appearing in final BW
+% we apply a HP filter in the SC stage, and only care about noise
+% in the 300Hz+ band
+ratio = f_HP_AP ./ f_pseudo;
+reduc_factor = (2/pi./((ratio).^2 - 1)) .* ...
+    (ratio*pi/4 - pi/2 + atan(ratio));
+% resulting noise due to 2 pseudoR
 noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
 % input-refer - note that this uses ideal gain
 noise_pseudoR_in = noise_pseudoR ./ (A_target.^2);
