@@ -77,6 +77,12 @@ gamma_S = 2/3;
 L_diff = 200e-9;
 L_guard = 1e-6;
 
+% Resistance: ohms/sq
+Rs = 1222;
+WR_min = 400e-9;
+% R mismatch coefficient [m]
+A_R = 0.016e-6;
+
 %% pseudoR cutoff and noise
 
 % possible pseudoR values from mc: 90GOhm to 5TOhm
@@ -606,6 +612,11 @@ ro_M1 = gmro_M1 / gm_M1;
 
 % size the degen resistors for reasonable voltage swing
 R_degen = V_R_degen / ID_main;
+
+% confirm resistor size is ok
+W_R = WR_min;
+L_R = R_degen / Rs * W_R;
+sigma_R = A_R ./ sqrt(L_R .* W_R) * R_degen;
 
 % beginning to compute the gain
 
