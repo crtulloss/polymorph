@@ -170,7 +170,9 @@ C_F = C_in / A_target;
 C_in = C_F * A_target * (1 + 1/A_OL_target) / (1 - A_target/A_OL_target);
 % integrated pseudoR noise for 300Hz sw cap HP cutoff
 f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
-reduc_factor = 1./(1 + f_HP_AP./f_pseudo);
+ratio = f_HP_AP ./ f_pseudo;
+reduc_factor = (2/pi./((ratio).^2 - 1)) .* ...
+    (ratio*pi/4 - pi/2 + atan(ratio));
 noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
 
 %% begin OTA design: sweep WL
@@ -484,35 +486,6 @@ Q = omega_0 / BW;
 % input cap size
 C_R1 = C_RA * A_f / Q;
 
-% sweep possible switching frequencies
-f_swcap = logspace(5,7,1000)';
-
-f_BW_amp = f_swcap ./ 10;
-
-% resistive approximation
-R_1 = 1 ./ (C_R1 * f_swcap);
-
-% one-stage version. settling will be ok, so look at gain degredation
-% using 60dB gain for one-stage (80dB not possible)
-rout_assumed = (1e3) / gm_min;
-Rout_amp_required = (rout_assumed .* R_1) ./ (R_1 - rout_assumed);
-% using reasonable assumptions for degen R and load device,
-% calculate what gmro would be necessary for up and down cascode devices
-R_degen_assumed = 50e3;
-ro_load_assumed = 4e7;
-Rout_branch = 2 * Rout_amp_required;
-gmro_required_up = sqrt(Rout_branch ./ R_degen_assumed);
-gmro_required_down = Rout_branch ./ ro_load_assumed;
-
-figure
-semilogx(f_swcap, gmro_required_up);
-hold on
-semilogx(f_swcap, gmro_required_down);
-xlabel('f_{swcap} (Hz)');
-ylabel('g_mr_o');
-title('Single-Stage: Cascode g_mr_o Required vs. Sw Cap Frequency');
-legend('Up Branch (fold)', 'Down Branch (load)');
-
 % settling limit
 T_settle_limit = 1 ./ (f_swcap * 2);
 
@@ -717,7 +690,8 @@ sigma_Vth_1_final = A_VT / sqrt(W_M1 * L_M1);
 V_os_3sigma_final = sigma_Vth_1_final * 3;
 
 % settling - need to satisfy swcap settling assumption
-T_settle_OTA = Rout_2 * C_R1 * settling_TCs;
+loop_gain_approx = A_OL_actual / A_target;
+T_settle_OTA = (Rout_2 / loop_gain_approx) * C_R1 * settling_TCs;
 
 T_settle_OTA_vec = T_settle_OTA .* ones(size(f_swcap));
 T_settle_sw_vec = T_settle_sw .* ones(size(f_swcap));

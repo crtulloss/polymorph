@@ -2,9 +2,9 @@ close all
 clear all
 
 polymorph_pixel_tasks = [63,59,56,56,56,56,57,57,57,59,57,57,54,60,61,...
-    57,58,58,57,56,57,55,53,49]';
+    57,58,58,57,56,57,55,53,49,49,49,48,47]';
 mindfuzz_design_tasks = [36,40,40,44,43,41,39,33,35,35,35,35,35,35,35,...
-    35,35,35,35,34,33,33,33,33]';
+    35,35,35,35,34,33,33,33,33,33,33,33,33]';
 total_design_tasks = polymorph_pixel_tasks + mindfuzz_design_tasks;
 
 l = length(polymorph_pixel_tasks);
