@@ -702,16 +702,12 @@ A_OL_actual = Rout_actual * Gm_actual;
 
 % noise - note this is just open-loop OTA noise for sanity check
 
-% compute second stage noise
-noise_final_A2 = 8*k*T*(gamma_W/gm_M7 + gamma_S*gm_M9/(gm_M7^2))*ENBW...
-    + 2 * K_flicker_P / (W_M7 * L_M7 * C_ox) * log(f_LP_AP / f_HP_AP);
-
 % compute first stage noise
 noise_final_A1 = 8*k*T*(gamma_W/gm_M1 + 1/(R_degen * gm_M1^2))*ENBW...
     + 2 * K_flicker_N / (W_M1 * L_M1 * C_ox) * log(f_LP_AP / f_HP_AP);
 
 % compute total input-referred OTA noise
-noise_final_OTA = noise_final_A1 + (noise_final_A2 / (A_OL_1_actual^2));
+noise_final_OTA = noise_final_A1;
 noise_final_OTA_V = sqrt(noise_final_OTA);
 
 % offset: it can be shown that all contributions are neglig except input
@@ -720,7 +716,7 @@ V_os_3sigma_final = sigma_Vth_1_final * 3;
 
 % settling - need to satisfy swcap settling assumption
 loop_gain_approx = A_OL_actual / A_target;
-T_settle_OTA = (Rout_2 / loop_gain_approx) * C_R1 * settling_TCs;
+T_settle_OTA = (Rout_actual / loop_gain_approx) * C_R1 * settling_TCs;
 
 T_settle_OTA_vec = T_settle_OTA .* ones(size(f_swcap));
 T_settle_sw_vec = T_settle_sw .* ones(size(f_swcap));
@@ -734,6 +730,9 @@ xlabel('f_{swcap} (Hz)');
 ylabel('\tau (\mus)');
 title('Amp/Filter Settling Time vs. Sw Cap Frequency');
 legend('Limit', 'Switch Settling', 'OTA 2nd Stage Settling');
+
+% fold node resistance - for comparison with output R to determine dom pole
+R_fold = 1/(Gs7 + 1/r_inbranch + 1/r_top);
 
 %% CMFB
 ID_cmfb = ID_load / cmfb_scale;
