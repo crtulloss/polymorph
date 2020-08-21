@@ -21,22 +21,21 @@ num_points = 1000;
 % filter design
 f_swcap = logspace(5,7,num_points)';
 %f_swcap = 480e3;
-f_HP = 300;
-f_LP = 10e3;
+f_HP_AP = 300;
+f_LP_AP = 10e3;
 % biquad filter params
-omega_0 = 2*pi*sqrt(f_HP .* f_LP);
-BW = 2*pi*(f_LP - f_HP);
+omega_0 = 2*pi*sqrt(f_HP_AP .* f_LP_AP);
+BW = 2*pi*(f_LP_AP - f_HP_AP);
 Q = omega_0 ./ BW;
 
 % mux freq
 f_mux = 32 * 30e3;
 
 % first stage gain
-A_1 = 100;
-A_OL1 = 10000;
+A_target = 100;
+A_OL_target = 10000;
 % first stage transconductance
-g_m1 = 230e-6;
-R_O1 = A_OL1 / g_m1;
+Gm_actual = 230e-6;
 
 % filter stage gain
 A_f = 1;
@@ -44,13 +43,8 @@ A_f = 1;
 A_LP = 5/3;
 
 % expected signal amplitudes
-sig_AP = 2e-3;
-sig_LFP = 3e-3;
-
-% amplitude range
-V_pp = 4e-3;
-V_p = V_pp / 2;
-V_p_single = V_p / 2;
+V_AP = 2e-3;
+V_LFP = 3e-3;
 
 % nonidealities
 gain_error = 0.01;
@@ -78,19 +72,18 @@ cap_per_area_mos = 7.0e-15;
 total_area = 152.5^2;
 total_cap = total_area * cap_per_area;
 
-area_limit = total_area * ones(num_points, 1);
+area_limit_vec = total_area * ones(num_points, 1);
 
-%% area contrib of LNA signal-path caps
+%% area contrib of first-stage CT filter capacitor and signal-path caps
 area_sig = 2 .* C_in ./ cap_per_area;
 
 figure
-semilogx(f_swcap, area_limit);
+semilogx(f_swcap, area_limit_vec);
 hold on
 semilogx(f_swcap, area_sig * ones(num_points, 1));
 
-%% area contrib of first-stage CT filter capacitor and signal-path caps
 f_LPCT = f_swcap ./ 10;
-C_L = g_m1 ./ (2*pi .* f_LPCT .* A_1);
+C_L = Gm_actual ./ (2*pi .* f_LPCT .* A_target);
 
 area_CT = C_L ./ cap_per_area_mos + area_sig;
 
@@ -105,8 +98,8 @@ R_2 = 1 ./ (f_swcap .* C_R2);
 C_R1 = C_R2 .* 10;
 R_1 = 1 ./ (f_swcap .* C_R1);
 % corresponding caps
-C_1 = 1 ./ (2*pi*f_HP.*R_1);
-C_2 = 1 ./ (2*pi*f_LP.*R_2);
+C_1 = 1 ./ (2*pi*f_HP_AP.*R_1);
+C_2 = 1 ./ (2*pi*f_LP_AP.*R_2);
 
 % for differential operation, need to double shunt R and half shunt C
 C_passive = 2*C_1 + C_R1/2 + 2*C_R2 + C_2/2;
@@ -122,13 +115,13 @@ semilogx(f_swcap, area_passive+area_CT);
 
 % swcap filter cap calculations
 C_4 = 10e-15;
-noise_inref = sqrt(k*T ./ C_4) ./ A_1;
+noise_inref = sqrt(k*T ./ C_4) ./ A_target;
 
-C_2 = f_swcap .* C_4 ./ (2*pi*f_HP);
+C_2 = f_swcap .* C_4 ./ (2*pi*f_HP_AP);
 
 C_1 = A_f .* C_2;
 
-C_3 = (2*pi*f_LP) .* C_1 ./ f_swcap;
+C_3 = (2*pi*f_LP_AP) .* C_1 ./ f_swcap;
 
 C_firstorder = 2.*(C_1 + C_2 + C_3 + C_4);
 
@@ -243,11 +236,11 @@ noise_total_sqrt = sqrt(noise_total);
 
 % plot as a function of fs
 figure
-semilogx(f_swcap, sqrt(noise_C_RB)*1e6/A_1);
+semilogx(f_swcap, sqrt(noise_C_RB)*1e6/A_target);
 hold on
-semilogx(f_swcap, sqrt(noise_C_RAP)*1e6/A_1);
-semilogx(f_swcap, sqrt(noise_C_RA)*1e6/A_1);
-semilogx(f_swcap, noise_total_sqrt*1e6/A_1);
+semilogx(f_swcap, sqrt(noise_C_RAP)*1e6/A_target);
+semilogx(f_swcap, sqrt(noise_C_RA)*1e6/A_target);
+semilogx(f_swcap, noise_total_sqrt*1e6/A_target);
 xlabel('f_{swcap} (Hz)');
 ylabel('V_{n-in-rms} (\muV)');
 title('Noise Approximation on Caps vs. Sw Cap Frequency');
@@ -295,8 +288,8 @@ A_3_required = 1 ./ (R_AP .* C_AP .* 2 * pi * stopband_edge);
 A_2_required = (1-gain_error).*(1 + A_f) ./ gain_error;
 
 % swing specs
-A2_swing = sig_AP .* A_1 .* A_f;
-A3_swing = sig_LFP .* A_1 .* A_LP;
+A2_swing = V_AP .* A_target .* A_f;
+A3_swing = V_LFP .* A_target .* A_LP;
 
 % settling specs
 % required Gm for each amp

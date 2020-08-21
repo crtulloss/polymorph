@@ -23,29 +23,60 @@ area_limit = (pixel_dim)^2;
 V_AP = 2e-3;
 V_LFP = 6e-3;
 
+% assumed compensation cap for OTAs
+C_load = 100e-15;
+% mux line wiring capacitance
+C_mux = 20e-15;
+
 %% design targets
+
+% frequencies
+f_mux = 32 * 30e3;
+f_LP_AP = 10e3;
+f_HP_AP = 300;
+% biquad filter params
+omega_0 = 2*pi * sqrt(f_HP_AP * f_LP_AP);
+BW = 2*pi * (f_LP_AP - f_HP_AP);
+Q = omega_0 / BW;
 
 % except for here, as noted, all noise is squared voltage
 noise_Vrms_target = 5e-6;
 noise_Vsq_target = noise_Vrms_target^2;
+% target for OTA noise source other than M1
+excess = 1.2;
+% equivalent noise bandwidth
+ENBW = f_LP_AP * pi/2;
 
+% gains
 A_target = 100;
 A_OL_target = 1e3;
 A_f = 1;
+A_LP = 5/3;
 
-f_LP_AP = 10e3;
-f_HP_AP = 300;
+% BPF nonidealities
+gain_error = 0.01;
+% stopband is defined as the point where 20dB rolloff stops and
+% the low-freq zero kicks in
+stopband_edge = 5;
 
-ENBW = f_LP_AP * pi/2;
-
-% number of time constants for "complete" settling
-settling_TCs = 5;
-
-% target for OTA noise source other than M1
-excess = 1.2;
+% settling accuracy and associated time constant
+settle_acc = 0.001;
+settling_TCs = -log(settle_acc);
+% fraction of period available for settling
+settling_frac = 0.4;
 
 % swing for A1
 V_swing_target = V_LFP * A_target;
+
+% BPF calcs: setup
+
+% number of sweep points
+num_points = 1000;
+% filter design
+f_swcap = logspace(5,7,num_points)';
+
+% vector version of area limit for plots
+area_limit_vec = area_limit * ones(num_points, 1);
 
 %% technology information
 
@@ -59,6 +90,11 @@ M_input_area = 120e-6 * 600e-9;
 C_gg = 252e-15;
 C_P_N = C_gg / M_input_area;
 C_P_P = 0.00633;
+
+% cap / area relationship for BPF calcs
+cap_per_area = 6.04e-15 / (2e-6)^2;    % [F/m^2]
+cap_per_area_mos = 7.0e-15 / (1e-6)^2;
+total_cap = area_limit * cap_per_area;
 
 % flicker noise coefficients [J]
 K_flicker_N = 1.24e-25;
@@ -82,6 +118,8 @@ Rs = 1222;
 WR_min = 400e-9;
 % R mismatch coefficient [m]
 A_R = 0.016e-6;
+
+
 
 %% pseudoR cutoff and noise
 
@@ -174,6 +212,8 @@ ratio = f_HP_AP ./ f_pseudo;
 reduc_factor = (2/pi./((ratio).^2 - 1)) .* ...
     (ratio*pi/4 - pi/2 + atan(ratio));
 noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
+
+
 
 %% begin OTA design: sweep WL
 
@@ -485,29 +525,6 @@ V_swing_telecas = V_DD - 1*V_hr_SI - 4*V_hr_WI - V_R_degen;
 V_swing_foldcas = V_DD - 1*V_hr_SI - 3*V_hr_WI - V_R_degen;
 V_swing_stage2 = V_DD - V_hr_SI - V_hr_WI;
 
-%% amp/filter interface
-
-% assume min size cap for C_RA
-C_RA = 10e-15;
-
-% biquad filter params
-omega_0 = 2*pi * sqrt(f_HP_AP * f_LP_AP);
-BW = 2*pi * (f_LP_AP - f_HP_AP);
-Q = omega_0 / BW;
-
-% input cap size
-C_R1 = C_RA * A_f / Q;
-
-% sweep possible switching frequencies
-f_swcap = logspace(5,7,1000)';
-
-% settling limit
-T_settle_limit = 1 ./ (f_swcap * 2);
-
-% assume switch resistance - settling through this
-R_sw = 14e3;
-T_settle_sw = R_sw * C_R1 * settling_TCs;
-
 %% transistor-level OTA design: action
 
 % M1: input pair (NMOS)
@@ -715,6 +732,19 @@ sigma_Vth_1_final = A_VT / sqrt(W_M1 * L_M1);
 V_os_3sigma_final = sigma_Vth_1_final * 3;
 
 % settling - need to satisfy swcap settling assumption
+
+% assume min size cap for C_RA
+C_RA = 10e-15;
+% input cap size
+C_R1 = C_RA * A_f / Q;
+
+% settling limit
+T_settle_limit = (1 ./ (f_swcap * 2)) * settling_frac;
+
+% assume switch resistance - settling through this
+R_sw = 14e3;
+T_settle_sw = R_sw * C_R1 * settling_TCs;
+
 loop_gain_approx = A_OL_actual / A_target;
 T_settle_OTA = (Rout_actual / loop_gain_approx) * C_R1 * settling_TCs;
 
@@ -768,6 +798,305 @@ ro_M13 = gmro_M13 / gm_M13;
 
 % calculate actual CMFB amp gain
 A_OL_CMFB_actual = (gmro_M13 * ro_M15) / (ro_M13 + ro_M15);
+
+
+
+%% area contrib of first-stage CT filter capacitor and signal-path caps
+area_sig = 2 .* C_in ./ cap_per_area;
+
+figure
+semilogx(f_swcap, area_limit_vec*(1e12));
+hold on
+semilogx(f_swcap, area_sig * ones(num_points, 1)*(1e12));
+
+f_LPCT = f_swcap ./ 10;
+C_L = Gm_actual ./ (2*pi .* f_LPCT .* A_target);
+
+area_CT = C_L ./ cap_per_area_mos + area_sig;
+
+semilogx(f_swcap, area_CT*(1e12));
+
+%% design based on CT passive second-order BPF
+
+% C_R2 will be the smallest
+C_R2 = 10e-15;
+R_2 = 1 ./ (f_swcap .* C_R2);
+% R_1 must be much smaller in order to gain unity gain in passband
+C_R1 = C_R2 .* 10;
+R_1 = 1 ./ (f_swcap .* C_R1);
+% corresponding caps
+C_1 = 1 ./ (2*pi*f_HP_AP.*R_1);
+C_2 = 1 ./ (2*pi*f_LP_AP.*R_2);
+
+% for differential operation, need to double shunt R and half shunt C
+C_passive = 2*C_1 + C_R1/2 + 2*C_R2 + C_2/2;
+
+% area
+area_passive = C_passive ./ cap_per_area;
+
+% plots
+semilogx(f_swcap, area_passive*(1e12));
+semilogx(f_swcap, (area_passive+area_CT)*(1e12));
+
+%% design based on CT first-order BPF (see Vol. 1 p. 185)
+
+% swcap filter cap calculations
+C_4 = 10e-15;
+noise_inref = sqrt(k*T ./ C_4) ./ A_target;
+
+C_2 = f_swcap .* C_4 ./ (2*pi*f_HP_AP);
+
+C_1 = A_f .* C_2;
+
+C_3 = (2*pi*f_LP_AP) .* C_1 ./ f_swcap;
+
+C_firstorder = 2.*(C_1 + C_2 + C_3 + C_4);
+
+% area
+area_firstorder = C_firstorder ./ cap_per_area;
+
+% plots
+semilogx(f_swcap, area_firstorder*(1e12));
+semilogx(f_swcap, (area_firstorder+area_CT)*(1e12));
+
+%% design based on CT biquad - TT
+
+% swcap filter cap calculations
+C_RA = 10e-15;
+
+R_A = 1 ./ (C_RA .* f_swcap);
+C_A = 1 ./ (omega_0 .* R_A);
+
+R_B = R_A .* Q;
+C_RB = 1 ./ (R_B .* f_swcap);
+
+R_1 = R_B ./ A_f;
+C_R1 = 1 ./ (R_1 .* f_swcap);
+
+C_biquad = 2.*(2.*(C_A + C_RA) + C_RB + C_R1);
+
+% area
+area_biquad = C_biquad ./ cap_per_area;
+
+% plots
+semilogx(f_swcap, area_biquad*(1e12));
+semilogx(f_swcap, (area_biquad+area_CT)*(1e12));
+
+%% design based on CT biquad - TT modified for high-Q
+
+% swcap filter cap calculations
+C_RAHQ = 10e-15;
+
+R_AHQ = 1 ./ (C_RAHQ .* f_swcap);
+C_AHQ = 1 ./ (omega_0 .* R_AHQ);
+
+C_BHQ = C_AHQ ./ Q;
+
+C_2HQ = A_f .* C_BHQ;
+
+C_HQ = 2.*(2.*(C_AHQ + C_RAHQ) + C_BHQ + C_2HQ);
+
+% area
+area_HQ = C_HQ ./ cap_per_area;
+
+% plots
+semilogx(f_swcap, area_HQ*(1e12));
+semilogx(f_swcap, (area_HQ+area_CT)*(1e12));
+
+%% design based on CT biquad - TT with specified LPF gain
+
+% ok to overwrite cap values if we end up using this topology
+
+% 2 degrees of freedom: C_RA and C_RAP
+
+% swcap filter cap calculations
+C_RA = 40e-15;
+R_A = 1 ./ (C_RA .* f_swcap);
+
+R_1 = R_A ./ A_LP;
+C_R1 = 1 ./ (R_1 .* f_swcap);
+
+R_B = R_1 .* A_f;
+C_RB = 1 ./ (R_B .* f_swcap);
+
+C_A = 1./ (R_B .* BW);
+
+C_RAP = 10e-15;
+R_AP = 1 ./ (C_RAP .* f_swcap);
+
+C_AP = 1 ./ (R_A .* R_AP .* C_A .* omega_0.^2);
+
+C_biquad = 2.*(C_A + C_RA + C_AP + C_RAP + C_RB + C_R1);
+
+% area
+area_biquad = C_biquad ./ cap_per_area;
+
+% plots
+semilogx(f_swcap, area_biquad*(1e12));
+semilogx(f_swcap, (area_biquad+area_CT)*(1e12));
+
+%% plot settings
+xlabel('f_{swcap} (Hz)');
+ylabel('Capacitor Area (\mum)^2');
+title('Capacitor Area vs. Sw Cap Frequency');
+legend('Limit', 'LNA Signal Path', 'CT',...
+    'Passive', 'CT+Passive',...
+    'FirstOrder', 'CT+FirstOrder',...
+    'TTBiquad', 'CT+TTBiquad',...
+    'HQBiquad', 'CT+HQBiquad',...
+    'TTBSwing', 'CT+TTBSwing');
+axis([1e5, 1e7, 0, 25000]);
+
+%% further analysis of TT topology
+
+% noise contribution of switches at each capacitor
+% noise in power!
+% assume that this sampled noise will appear spread over the fs/2 BW
+noise_C_RB = 2.*k.*T ./ (C_A + C_RB);
+noise_C_RAP = 2.*k.*T .* C_RA ./ (C_AP .* C_RB);
+noise_C_RA = 2.*k.*T .* C_RA ./ (C_RB .* (C_A + C_RB));
+
+% total noise - assume neglig contrib at C_A,
+% and assume C_R1 yields same contrib as C_RA
+noise_total = noise_C_RB + noise_C_RAP + 2.*noise_C_RA;
+noise_total_sqrt = sqrt(noise_total);
+
+% plot as a function of fs
+figure
+semilogx(f_swcap, sqrt(noise_C_RB)*1e6/A_target);
+hold on
+semilogx(f_swcap, sqrt(noise_C_RAP)*1e6/A_target);
+semilogx(f_swcap, sqrt(noise_C_RA)*1e6/A_target);
+semilogx(f_swcap, noise_total_sqrt*1e6/A_target);
+xlabel('f_{swcap} (Hz)');
+ylabel('V_{n-in-rms} (\muV)');
+title('Noise Approximation on Caps vs. Sw Cap Frequency');
+legend('C_{RB}', 'C_{RA1}', 'C_{RA2},C_{R1}', 'Total');
+
+
+
+%% Source Follower Required Specs
+
+% first calculate settling time: 0.4 of clock period
+settling_time = settling_frac ./ f_swcap;
+% associated time constant required
+time_const = settling_time / settling_TCs;
+
+% calculate gm required for this time constant
+gm_SF1_req = C_R1 ./ time_const;
+
+% power calculation
+I_SF1_req = 2 .* (gm_SF1_req / gmid_WI);
+
+%% Mux Driver Required Specs (A2 or SF2)
+
+% first calculate settling time: 0.4 of mux clock period
+settling_time_mux = settling_frac ./ f_mux;
+% associated time constant required
+time_const_mux = settling_time_mux / settling_TCs;
+
+% if we use A2 to drive the mux line directly
+% calculate equivalent cap used in time constant formula
+cap_eq_2_mux = ((C_load+C_mux) .* max(C_R1, C_RA) +...
+    (C_load+C_mux) .* (C_RB + C_A) +...
+    max(C_R1, C_RA) .* (C_RB + C_A)) ./ (C_RB + C_A);
+% calculate required gm
+Gm_2_req_mux = cap_eq_2_mux ./ time_const_mux;
+I_2_req_mux = 2 .* (Gm_2_req_mux / gmid_WI);
+
+% if we use a source follower
+% calculate gm required for this time constant
+gm_SF2_req = C_mux ./ time_const_mux;
+% power calculation
+I_SF2_req = 2 .* (gm_SF2_req / gmid_WI);
+
+%% Opamp Required Specs
+
+% gain specs
+A_3_required = 1 ./ (R_AP .* C_AP .* 2 * pi * stopband_edge);
+A_2_required = (1-gain_error).*(1 + A_f) ./ gain_error;
+
+% swing specs
+A2_swing = V_AP .* A_target .* A_f;
+A3_swing = V_LFP .* A_target .* A_LP;
+
+% settling specs
+% required Gm for each amp
+cap_eq_2 = (C_load .* max(C_R1, C_RA) + C_load .* (C_RB + C_A) +...
+    max(C_R1, C_RA) .* (C_RB + C_A)) ./ (C_RB + C_A);
+cap_eq_3 = (C_load .* C_RAP + C_load .* C_AP + C_RAP .* C_AP) ./ C_AP;
+Gm_2_req = cap_eq_2 ./ time_const;
+Gm_3_req = cap_eq_3 ./ time_const;
+
+% power calculation from linear-charging assumption
+I_2_req = 2 .* (Gm_2_req / gmid_WI);
+I_3_req = 2 .* (Gm_3_req / gmid_WI);
+P_swcap = V_DD .* (I_2_req + I_3_req + I_SF1_req);
+P_swcap_A2mux = V_DD .* (I_2_req_mux + I_3_req + I_SF1_req);
+P_swcap_SFmux = V_DD .* (I_2_req + I_3_req + I_SF1_req + I_SF2_req);
+
+% now what if amp is slewing?
+slew_cap_2 = 1 ./ (1./(C_RB + C_A) + 1./(C_R1 + C_RA));
+slew_cap_3 = 1 ./ (1./(C_AP) + 1./(C_RAP));
+% assume main signal at A2 output is AP
+Iss_2_req = A2_swing ./ settling_time .* slew_cap_2;
+% assume main signal at A3 output is LFP
+Iss_3_req = A3_swing ./ settling_time .* slew_cap_3;
+
+% another view of bandwidth requirements: GBW
+gain_A2 = max(C_RA, C_R1) ./ (C_RB + C_A);
+gain_A3 = C_RAP ./ C_AP;
+% calculate required BW
+BW_req = 1 ./ (time_const .* 2 .* pi);
+% calculate required GBW
+GBW_A2 = gain_A2 .* BW_req;
+GBW_A3 = gain_A3 .* BW_req;
+
+figure
+semilogx(f_swcap, Gm_2_req*1e6);
+hold on
+semilogx(f_swcap, Gm_2_req_mux*1e6);
+semilogx(f_swcap, Gm_3_req*1e6);
+semilogx(f_swcap, gm_SF1_req*1e6);
+semilogx(f_swcap, gm_SF2_req*1e6*ones(size(gm_SF1_req)));
+xlabel('f_{swcap} (Hz)');
+ylabel('G_m (\muS)');
+title('Required Transconductance for Linear Cap Charging');
+legend('A_2', 'A_2 driving mux', 'A_3', 'SF_1', 'SF_2');
+
+figure
+semilogx(f_swcap, Iss_2_req*1e6);
+hold on
+semilogx(f_swcap, Iss_3_req*1e6);
+xlabel('f_{swcap} (Hz)');
+ylabel('I_{SS} (\muA)');
+title('Required Opamp Current for Slewing Cap Charging');
+legend('A_2', 'A_3');
+
+figure
+semilogx(f_swcap, GBW_A2/1e3);
+hold on
+semilogx(f_swcap, GBW_A3/1e3);
+xlabel('f_{swcap} (Hz)');
+ylabel('GBW (kHz)');
+title('Required GBW for Closed-Loop Integrator Gain');
+legend('A_2', 'A_3');
+
+figure
+yyaxis left
+semilogx(f_swcap, P_swcap*1e6);
+hold on
+semilogx(f_swcap, P_swcap_A2mux*1e6);
+semilogx(f_swcap, P_swcap_SFmux*1e6);
+ylabel('P (\muW)');
+yyaxis right
+semilogx(f_swcap, (area_biquad+area_CT)*(1e12));
+ylabel('A (\mum)^2');
+xlabel('f_{swcap} (Hz)');
+title('Tradeoff Between Power and Area');
+legend('P: no mux', 'P: A2 drives mux', 'P: SF drives mux', 'A');
+
+
 
 %% BPF A2 design: tunable parameters
 
@@ -966,6 +1295,9 @@ A_2_2 = gmro_A2_M5 * ro_A2_M7 / (ro_A2_M5 + ro_A2_M7);
 A_2_actual = A_2_1 * A_2_2;
 
 % CMFB sizing?
+
+% TODO MT2 from maximum expected current. plug in gm/id in MI, use max I
+% to find W/L, use min L
 
 %% BPF A3 design: tunable parameters
 
@@ -1243,6 +1575,96 @@ area_SF1 = area_SF1 + get_area(L_SF1_M2, W_SF1_M2, L_guard, L_diff);
 
 % total area
 area_total = area_A1 + 2*area_A3 + 2*area_SF1;
+
+
+
+%% appendix: confirming biquad frequency response (ideal)
+
+% uses TT design with specified LPF gain
+f = logspace(1,6,1000)';
+jomega = 1i * f .* 2 .* pi;
+num = jomega .* BW;
+den = jomega.^2 + jomega .* BW + omega_0.^2;
+TF = num./den;
+TF_dB = 20.*log10(abs(TF));
+
+num_LP = omega_0.^2 .* A_LP;
+TF_LP = num_LP ./ den;
+TF_LP_dB = 20.*log10(abs(TF_LP));
+
+figure
+semilogx(f, TF_dB);
+axis([1e1, 1e6, -60, 20]);
+hold on
+semilogx(f, TF_LP_dB);
+xlabel('f (Hz)');
+ylabel('|H(f)| (dB)');
+title('Desired biquad frequency response');
+legend('BPF Output', 'LPF Output');
+
+%% appendix: validation of z-domain transfer function
+
+% uses TT design with specified LPF gain
+
+% need to use only one switched-cap frequency for this
+f_swcap = 480e3;
+
+% swcap filter cap calculations
+C_RA = 40e-15;
+R_A = 1 ./ (C_RA .* f_swcap);
+
+R_1 = R_A ./ A_LP;
+C_R1 = 1 ./ (R_1 .* f_swcap);
+
+R_B = R_1 .* A_f;
+C_RB = 1 ./ (R_B .* f_swcap);
+
+C_A = 1./ (R_B .* BW);
+
+C_RAP = 10e-15;
+R_AP = 1 ./ (C_RAP .* f_swcap);
+
+C_AP = 1 ./ (R_A .* R_AP .* C_A .* omega_0.^2);
+
+% validation
+f = logspace(-3,6,1000)';
+jomega = 1i .* f .* 2 .* pi;
+num = -jomega .* C_R1 .* f_swcap ./ C_A;
+den = (jomega).^2 + jomega .* C_RB .* f_swcap ./ C_A +...
+    C_RA .* C_RAP .* (f_swcap).^2 ./ C_A ./ C_AP;
+TF = num./den;
+TF_dB = 20.*log10(abs(TF));
+
+num_LP = -C_R1 .* C_RAP .* (f_swcap).^2 ./ C_A ./ C_AP;
+TF_LP = num_LP ./ den;
+TF_LP_dB = 20.*log10(abs(TF_LP));
+
+z = exp(jomega ./ f_swcap);
+diff = 1 - z.^-1;
+
+num = -C_R1 .* C_AP .* diff;
+den = C_A.*C_AP .* (diff).^2 + C_RB .* C_AP .* diff + C_RA.*C_RAP .* z.^-1;
+num_LP = -C_R1 .* C_RAP;
+
+ZTF = num./den;
+ZTF_dB = 20.*log10(abs(ZTF));
+
+ZTF_LP = num_LP ./ den;
+ZTF_LP_dB = 20.*log10(abs(ZTF_LP));
+
+figure
+semilogx(f, TF_dB);
+axis([1e-3, f_swcap/2, -60, 20]);
+hold on
+semilogx(f, ZTF_dB);
+semilogx(f, TF_LP_dB);
+semilogx(f, ZTF_LP_dB);
+xlabel('f (Hz)');
+ylabel('|H(f)| (dB)');
+legend('BPF CT approx', 'BPF Actual DT', 'LPF CT approx', 'LPF Actual DT');
+title('Comparison between CT approx and Actual DT (z-domain)');
+
+
 
 %% sizing helper functions
 
