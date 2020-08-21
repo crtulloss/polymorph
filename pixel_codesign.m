@@ -21,7 +21,7 @@ area_limit = (pixel_dim)^2;
 % amplitude range
 % peak voltages for AP (300Hz - 10kHz) and a little LFP (50Hz - 10kHz)
 V_AP = 2e-3;
-V_LFP = 4e-3;
+V_LFP = 6e-3;
 
 %% design targets
 
@@ -214,7 +214,7 @@ gm_req = 2 .* 4 .* k .* T .* gamma_W...
 sigma_Vth_1 = A_VT ./ sqrt(WL);
 V_os_3sigma = sigma_Vth_1 .* 3;
 
-%% plots from flicker noise sizing choice
+%% plots from WL sizing choice
 
 % noise breakdown
 figure
@@ -443,13 +443,15 @@ legend('L = 130nm', 'L = 200nm', 'L = 500nm', 'L = 1\mum', 'L = 2\mum',...
 W_min = 200e-9;
 
 % assumptions for WI or SI
+% PI: "pretty inverted", P is between M and S
 gmid_WI = 25;
 gmid_MI = 20;
+gmid_PI = 15;
 gmid_SI = 10;
 
 % M1 specs determined from optimization above
 gm_min = 100e-6;
-WL_min = 3.85e-11;
+WL_min = 3.8e-11;
 
 % ratio between main branch and output branch
 current_scale = 16;
@@ -457,11 +459,21 @@ current_scale = 16;
 cmfb_scale = 1;
 
 % partition of gains
-A_OL_1_target = 320;
-A_OL_2_target = A_OL_target / A_OL_1_target;
 A_OL_CMFB_target = 20;
 
+% assumption that (gmro)9ro11 << (gmro)7(gmro)5R,
+% but this will not be possible while meeting other requirements
+% to account for this, let gg_factor_1(gmro)9ro11 = (gmro)7(gmro)5R
+gg_factor_1 = 0.5;
+% assumption that (gmro)3ro1 >> (gmro)5R.
+% let (gmro)3ro1 = gg_factor_2*(gmro)5R
+gg_factor_2 = 5;
+
+% only assumed gmro - it will be overwritten later so it's ok
+gmro_9_target = 30;
+
 % degen resistor headroom consumption
+% chosen to achieve a tradeoff between Rout and swing
 V_R_degen = 0.2;
 % estimated headroom for saturation for a single device (even SI)
 V_hr_SI = 300e-3;
@@ -485,6 +497,9 @@ Q = omega_0 / BW;
 
 % input cap size
 C_R1 = C_RA * A_f / Q;
+
+% sweep possible switching frequencies
+f_swcap = logspace(5,7,1000)';
 
 % settling limit
 T_settle_limit = 1 ./ (f_swcap * 2);
@@ -584,90 +599,104 @@ gm_M1 = gmid_M1 * ID_main;
 ro_M1 = gmro_M1 / gm_M1;
 
 % size the degen resistors for reasonable voltage swing
-R_degen = V_R_degen / ID_main;
+R_degen = V_R_degen / ID_both;
 
 % confirm resistor size is ok
 W_R = WR_min;
 L_R = R_degen / Rs * W_R;
 sigma_R = A_R ./ sqrt(L_R .* W_R) * R_degen;
 
-% beginning to compute the gain
+% M9 and M11 based on gain equation
+gmro9ro11_target = A_OL_target * (1+1/gg_factor_1)^2 / gm_M1;
 
-% from equation for gain of first stage...
-gmro_factor = gm_M1 * ro_M1^2 * R_degen / (ro_M1 + R_degen)^2;
-% ... we can determine a target for gmro of M3 and M5
-gmro_35_target = A_OL_1_target / gmro_factor;
+% calculte M11 requirements
+gm_M11_assumed = gmid_SI * ID_load;
+ro_M11_target = gmro9ro11_target / gmro_9_target;
+gmro_11_target = gm_M11_assumed * ro_M11_target;
 
-% size 3,5 based on this target
+% M11: load device (NMOS)
+[W, gmid, gmro] = size_M(L_N, gmid_n, gmro_n, gmid_PI, 0, ID_load,...
+    num_lengths_N, points_per_length);
+[L_M11, W_M11, gmid_M11, gmro_M11] = pick_L(L_N, W, gmid, gmro,...
+    gmro_11_target, num_lengths_N, W_min);
+% compute M11 small signal params
+gm_M11 = gmid_M11 * ID_load;
+ro_M11 = gmro_M11 / gm_M11;
+
+% re-calculate gmro9 target
+gmro_9_target = gmro9ro11_target / ro_M11;
+
+% M9: load cascode device (NMOS)
+[W, gmid, gmro] = size_M(L_N, gmid_n, gmro_n, gmid_MI, 1, ID_load,...
+    num_lengths_N, points_per_length);
+[L_M9, W_M9, gmid_M9, gmro_M9] = pick_L(L_N, W, gmid, gmro,...
+    gmro_9_target, num_lengths_N, W_min);
+% compute M9 small signal params
+gm_M9 = gmid_M9 * ID_load;
+ro_M9 = gmro_M9 / gm_M9;
+
+% gmro_57 based on ratio gg_factor_1 (see above)
+gmro_57_target = sqrt(gg_factor_1 * gmro_M9 * ro_M11 / R_degen);
+
+% size 5,7 based on this target
+
+% M5: current source device (PMOS)
+[W, gmid, gmro] = size_M(L_P, gmid_p, gmro_p, gmid_MI, 1, ID_both,...
+    num_lengths_P, points_per_length);
+[L_M5, W_M5, gmid_M5, gmro_M5] = pick_L(L_P, W, gmid, gmro,...
+    gmro_57_target, num_lengths_P, W_min);
+% compute M5 small signal params
+gm_M5 = gmid_M5 * ID_main;
+ro_M5 = gmro_M5 / gm_M5;
+
+% M7: folded cascode device (PMOS)
+[W, gmid, gmro] = size_M(L_P, gmid_p, gmro_p, gmid_MI, 1, ID_load,...
+    num_lengths_P, points_per_length);
+[L_M7, W_M7, gmid_M7, gmro_M7] = pick_L(L_P, W, gmid, gmro,...
+    gmro_57_target, num_lengths_P, W_min);
+% compute M7 small signal params
+gm_M7 = gmid_M7 * ID_load;
+ro_M7 = gmro_M7 / gm_M7;
+
+% size M3 such that (gmro)3ro1 >> (gmro)5R
+gmro_3_target = gg_factor_2 * gmro_M5 * R_degen / ro_M1;
 
 % M3: telecascode device (NMOS)
 [W, gmid, gmro] = size_M(L_N, gmid_n, gmro_n, gmid_MI, 1, ID_main,...
     num_lengths_N, points_per_length);
 [L_M3, W_M3, gmid_M3, gmro_M3] = pick_L(L_N, W, gmid, gmro,...
-    gmro_35_target, num_lengths_N, W_min);
+    gmro_3_target, num_lengths_N, W_min);
 % compute M3 small signal params
 gm_M3 = gmid_M3 * ID_main;
 ro_M3 = gmro_M3 / gm_M3;
 
-% M5: current source device (PMOS)
-[W, gmid, gmro] = size_M(L_P, gmid_p, gmro_p, gmid_MI, 1, ID_main,...
-    num_lengths_P, points_per_length);
-[L_M5, W_M5, gmid_M5, gmro_M5] = pick_L(L_P, W, gmid, gmro,...
-    gmro_35_target, num_lengths_P, W_min);
-% compute M5 small signal params
-gm_M5 = gmid_M5 * ID_main;
-ro_M5 = gmro_M5 / gm_M5;
+% calculate the actual gain
 
-% calculate actual first stage gain
-
-% transconductance
-Gs3 = (gmro_M3 + 1) / (ro_M3 + gmro_M5 * R_degen);
-Gm_reduc = (Gs3 * ro_M1) / (1 + Gs3 * ro_M1);
-Gm_1 = gm_M1 * Gm_reduc;
+% impedance looking into M3 drain
+r_inbranch = gmro_M3 * ro_M1;
+% impedance looking into M5 drain
+r_top = gmro_M5 * R_degen;
+% impedance looking into folding node
+r_fold = 1 / (1/(r_top) + 1/(r_inbranch));
+% impedance looking up from output
+r_up = r_fold * gmro_M7;
+% impedance looking down from output
+r_down = gmro_M9 * ro_M11;
 
 % output resistance
-Rout_1 = 1/(1/(gmro_M5 * R_degen) + 1/(gmro_M3 * ro_M1));
+Rout_actual = 1/(1/r_down + 1/r_up);
 
-A_OL_1_actual = Gm_1 * Rout_1;
+% transconductance
+Gs7 = (gm_M7 + 1/ro_M7) / (1 + gmro_M9 * ro_M11 / ro_M7);
+Gd5 = 1 / (ro_M5 * (1 + R_degen / ro_M5 + gm_M5 * R_degen));
+Gs3 = (gm_M3 + 1/ro_M3) / (1 + 1 / (ro_M3 * (Gs7 + Gd5)));
 
-% compute gain target for second stage
-A_OL_2_target_updated = max(A_OL_target / A_OL_1_actual, A_OL_2_target);
+input_split = Gs3 * ro_M1 / (1 + Gs3 * ro_M1);
+fold_split = Gs7 / (Gs7 + Gd5);
 
-% compute gmro target based on necessity that gm7ro9 > A2 for later math
-gm_M7_assumed = gmid_WI * ID_load;
-gm_M9_assumed = gmid_SI * ID_load;
-ro_9_target = A_OL_2_target_updated / gm_M7_assumed;
-gmro_9_target = gm_M9_assumed * ro_9_target;
+Gm_actual = gm_M1 * input_split * fold_split;
 
-% M9: load device (NMOS)
-% the only strong-inversion transistor (bc noise)
-[W, gmid, gmro] = size_M(L_N, gmid_n, gmro_n, gmid_SI, 0, ID_load,...
-    num_lengths_N, points_per_length);
-[L_M9, W_M9, gmid_M9, gmro_M9] = pick_L(L_N, W, gmid, gmro,...
-    gmro_9_target, num_lengths_N, W_min);
-% compute M11 small signal params
-gm_M9 = gmid_M9 * ID_load;
-ro_M9 = gmro_M9 / gm_M9;
-
-% compute target gmro7 based on target gain
-ro_M7_target = (A_OL_2_target_updated * ro_M9) /...
-    (gm_M7_assumed * ro_M9 - A_OL_2_target_updated);
-gmro_7_target = gm_M7_assumed * ro_M7_target;
-
-% M7: second stage input device (PMOS)
-[W, gmid, gmro] = size_M(L_P, gmid_p, gmro_p, gmid_WI, 1, ID_load,...
-    num_lengths_P, points_per_length);
-[L_M7, W_M7, gmid_M7, gmro_M7] = pick_L(L_P, W, gmid, gmro,...
-    gmro_7_target, num_lengths_P, W_min);
-% compute M7 small signal params
-gm_M7 = gmid_M7 * ID_load;
-ro_M7 = gmro_M7 / gm_M7;
-
-% calculate actual second stage gain
-Rout_2 = (ro_M7 * ro_M9) / (ro_M7 + ro_M9);
-A_OL_2_actual = gm_M7 * Rout_2;
-
-A_OL_actual = A_OL_1_actual * A_OL_2_actual;
+A_OL_actual = Rout_actual * Gm_actual;
 
 %% post-design OTA characterization
 
