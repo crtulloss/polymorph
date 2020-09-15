@@ -739,7 +739,7 @@ C_RA = 10e-15;
 C_R1 = C_RA * A_f / Q;
 
 % settling limit
-T_settle_limit = (1 ./ (f_swcap * 2)) * settling_frac;
+T_settle_limit = (1 ./ f_swcap) * settling_frac;
 
 % assume switch resistance - settling through this
 R_sw = 14e3;
@@ -757,7 +757,7 @@ hold on
 semilogx(f_swcap, T_settle_sw_vec*1e6);
 semilogx(f_swcap, T_settle_OTA_vec*1e6);
 xlabel('f_{swcap} (Hz)');
-ylabel('\tau (\mus)');
+ylabel('n\tau (\mus)');
 title('Amp/Filter Settling Time vs. Sw Cap Frequency');
 legend('Limit', 'Switch Settling', 'OTA 2nd Stage Settling');
 
