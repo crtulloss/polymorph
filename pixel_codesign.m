@@ -23,7 +23,7 @@ area_limit = (pixel_dim)^2;
 V_AP = 2e-3;
 V_LFP = 6e-3;
 
-% assumed compensation cap for OTAs
+% assumed compensation cap for filter OTAs
 C_load = 100e-15;
 % mux line wiring capacitance
 C_mux = 20e-15;
@@ -79,26 +79,33 @@ f_swcap = logspace(5,7,num_points)';
 area_limit_vec = area_limit * ones(num_points, 1);
 
 %% technology information
+% info for thicc oxide devices is given by metric3 instead of metric
 
 L_min = 130e-9;
+L_min3 = 350e-9;
 
 % C_ox and C_P (C_gg) [F/m^2]
 % C_ox for flicker noise
 C_ox = 0.01;
+C_ox3 = 0.005;
 % C_P for parasitics
 M_input_area = 120e-6 * 600e-9;
 C_gg = 252e-15;
 C_P_N = C_gg / M_input_area;
 C_P_P = 0.00633;
+C_P_N3 = 0.0017;
+C_P_P3 = 0.0017;
 
 % cap / area relationship for BPF calcs
-cap_per_area = 6.04e-15 / (2e-6)^2;    % [F/m^2]
+cap_per_area_mim = 6.04e-15 / (2e-6)^2;    % [F/m^2]
 cap_per_area_mos = 7.0e-15 / (1e-6)^2;
-total_cap = area_limit * cap_per_area;
+total_cap = area_limit * cap_per_area_mim;
 
 % flicker noise coefficients [J]
 K_flicker_N = 1.24e-25;
 K_flicker_P = 1.98e-25;
+K_flicker_N3 = 1.55e-25;
+K_flicker_P3 = 4.27e-25;
 
 % mismatch coefficients
 % [Vm] and [m]
@@ -108,6 +115,7 @@ A_beta = 0.013e-6;
 % noise factor gamma (often quoted as 2/3)
 gamma_W = 1;
 gamma_S = 2/3;
+gamma_W3 = 1.5;
 
 % estimates for device area
 L_diff = 200e-9;
@@ -304,6 +312,12 @@ points_per_length = 25;
 L_N = [130e-9 200e-9 500e-9 1e-6 2e-6 4e-6 6e-6 8e-6 10e-6 12e-6]';
 L_P = L_N;
 
+% for thick-oxide devices
+num_lengths_N3 = 9;
+num_lengths_P3 = 9;
+L_N3 = [350e-9 500e-9 1e-6 2e-6 4e-6 6e-6 8e-6 10e-6 12e-6]';
+L_P3 = L_N3;
+
 % NMOS
 
 % import the characterization data
@@ -340,6 +354,36 @@ cgg_n_8u = readmatrix('charac/charac_cgg_n_8u.csv');
 cgg_n_10u = readmatrix('charac/charac_cgg_n_10u.csv');
 cgg_n_12u = readmatrix('charac/charac_cgg_n_12u.csv');
 
+gmid_N_350n = readmatrix('charac/charac_gmid_N_350n.csv');
+gmid_N_500n = readmatrix('charac/charac_gmid_N_500n.csv');
+gmid_N_1u = readmatrix('charac/charac_gmid_N_1u.csv');
+gmid_N_2u = readmatrix('charac/charac_gmid_N_2u.csv');
+gmid_N_4u = readmatrix('charac/charac_gmid_N_4u.csv');
+gmid_N_6u = readmatrix('charac/charac_gmid_N_6u.csv');
+gmid_N_8u = readmatrix('charac/charac_gmid_N_8u.csv');
+gmid_N_10u = readmatrix('charac/charac_gmid_N_10u.csv');
+gmid_N_12u = readmatrix('charac/charac_gmid_N_12u.csv');
+
+gmro_N_350n = readmatrix('charac/charac_gmro_N_350n.csv');
+gmro_N_500n = readmatrix('charac/charac_gmro_N_500n.csv');
+gmro_N_1u = readmatrix('charac/charac_gmro_N_1u.csv');
+gmro_N_2u = readmatrix('charac/charac_gmro_N_2u.csv');
+gmro_N_4u = readmatrix('charac/charac_gmro_N_4u.csv');
+gmro_N_6u = readmatrix('charac/charac_gmro_N_6u.csv');
+gmro_N_8u = readmatrix('charac/charac_gmro_N_8u.csv');
+gmro_N_10u = readmatrix('charac/charac_gmro_N_10u.csv');
+gmro_N_12u = readmatrix('charac/charac_gmro_N_12u.csv');
+
+cgg_N_350n = readmatrix('charac/charac_cgg_N_350n.csv');
+cgg_N_500n = readmatrix('charac/charac_cgg_N_500n.csv');
+cgg_N_1u = readmatrix('charac/charac_cgg_N_1u.csv');
+cgg_N_2u = readmatrix('charac/charac_cgg_N_2u.csv');
+cgg_N_4u = readmatrix('charac/charac_cgg_N_4u.csv');
+cgg_N_6u = readmatrix('charac/charac_cgg_N_6u.csv');
+cgg_N_8u = readmatrix('charac/charac_cgg_N_8u.csv');
+cgg_N_10u = readmatrix('charac/charac_cgg_N_10u.csv');
+cgg_N_12u = readmatrix('charac/charac_cgg_N_12u.csv');
+
 % concatenate the results for easier looping
 gmid_n = horzcat(gmid_n_130n, gmid_n_200n(:,2), gmid_n_500n(:,2),...
     gmid_n_1u(:,2), gmid_n_2u(:,2), gmid_n_4u(:,2), gmid_n_6u(:,2),...
@@ -350,6 +394,16 @@ gmro_n = horzcat(gmro_n_130n, gmro_n_200n(:,2), gmro_n_500n(:,2),...
 cgg_n = horzcat(cgg_n_130n, cgg_n_200n(:,2), cgg_n_500n(:,2),...
     cgg_n_1u(:,2), cgg_n_2u(:,2), cgg_n_4u(:,2), cgg_n_6u(:,2),...
     cgg_n_8u(:,2), cgg_n_10u(:,2), cgg_n_12u(:,2));
+
+gmid_N = horzcat(gmid_N_350n, gmid_N_500n(:,2),...
+    gmid_N_1u(:,2), gmid_N_2u(:,2), gmid_N_4u(:,2), gmid_N_6u(:,2),...
+    gmid_N_8u(:,2), gmid_N_10u(:,2), gmid_N_12u(:,2));
+gmro_N = horzcat(gmro_N_350n, gmro_N_500n(:,2),...
+    gmro_N_1u(:,2), gmro_N_2u(:,2), gmro_N_4u(:,2), gmro_N_6u(:,2),...
+    gmro_N_8u(:,2), gmro_N_10u(:,2), gmro_N_12u(:,2));
+cgg_N = horzcat(cgg_N_350n, cgg_N_500n(:,2),...
+    cgg_N_1u(:,2), cgg_N_2u(:,2), cgg_N_4u(:,2), cgg_N_6u(:,2),...
+    cgg_N_8u(:,2), cgg_N_10u(:,2), cgg_N_12u(:,2));
 
 % plot the characterization results
 figure
@@ -432,6 +486,36 @@ gmro_p_8u = readmatrix('charac/charac_gmro_p_8u.csv');
 gmro_p_10u = readmatrix('charac/charac_gmro_p_10u.csv');
 gmro_p_12u = readmatrix('charac/charac_gmro_p_12u.csv');
 
+gmid_P_350n = readmatrix('charac/charac_gmid_P_350n.csv');
+gmid_P_500n = readmatrix('charac/charac_gmid_P_500n.csv');
+gmid_P_1u = readmatrix('charac/charac_gmid_P_1u.csv');
+gmid_P_2u = readmatrix('charac/charac_gmid_P_2u.csv');
+gmid_P_4u = readmatrix('charac/charac_gmid_P_4u.csv');
+gmid_P_6u = readmatrix('charac/charac_gmid_P_6u.csv');
+gmid_P_8u = readmatrix('charac/charac_gmid_P_8u.csv');
+gmid_P_10u = readmatrix('charac/charac_gmid_P_10u.csv');
+gmid_P_12u = readmatrix('charac/charac_gmid_P_12u.csv');
+
+gmro_P_350n = readmatrix('charac/charac_gmro_P_350n.csv');
+gmro_P_500n = readmatrix('charac/charac_gmro_P_500n.csv');
+gmro_P_1u = readmatrix('charac/charac_gmro_P_1u.csv');
+gmro_P_2u = readmatrix('charac/charac_gmro_P_2u.csv');
+gmro_P_4u = readmatrix('charac/charac_gmro_P_4u.csv');
+gmro_P_6u = readmatrix('charac/charac_gmro_P_6u.csv');
+gmro_P_8u = readmatrix('charac/charac_gmro_P_8u.csv');
+gmro_P_10u = readmatrix('charac/charac_gmro_P_10u.csv');
+gmro_P_12u = readmatrix('charac/charac_gmro_P_12u.csv');
+
+cgg_P_350n = readmatrix('charac/charac_cgg_P_350n.csv');
+cgg_P_500n = readmatrix('charac/charac_cgg_P_500n.csv');
+cgg_P_1u = readmatrix('charac/charac_cgg_P_1u.csv');
+cgg_P_2u = readmatrix('charac/charac_cgg_P_2u.csv');
+cgg_P_4u = readmatrix('charac/charac_cgg_P_4u.csv');
+cgg_P_6u = readmatrix('charac/charac_cgg_P_6u.csv');
+cgg_P_8u = readmatrix('charac/charac_cgg_P_8u.csv');
+cgg_P_10u = readmatrix('charac/charac_cgg_P_10u.csv');
+cgg_P_12u = readmatrix('charac/charac_cgg_P_12u.csv');
+
 % concatenate the results for easier looping
 gmid_p = horzcat(gmid_p_130n, gmid_p_200n(:,2), gmid_p_500n(:,2),...
     gmid_p_1u(:,2), gmid_p_2u(:,2), gmid_p_4u(:,2), gmid_p_6u(:,2),...
@@ -439,6 +523,16 @@ gmid_p = horzcat(gmid_p_130n, gmid_p_200n(:,2), gmid_p_500n(:,2),...
 gmro_p = horzcat(gmro_p_130n, gmro_p_200n(:,2), gmro_p_500n(:,2),...
     gmro_p_1u(:,2), gmro_p_2u(:,2), gmro_p_4u(:,2), gmro_p_6u(:,2),...
     gmro_p_8u(:,2), gmro_p_10u(:,2), gmro_p_12u(:,2));
+
+gmid_P = horzcat(gmid_P_350n, gmid_P_500n(:,2),...
+    gmid_P_1u(:,2), gmid_P_2u(:,2), gmid_P_4u(:,2), gmid_P_6u(:,2),...
+    gmid_P_8u(:,2), gmid_P_10u(:,2), gmid_P_12u(:,2));
+gmro_P = horzcat(gmro_P_350n, gmro_P_500n(:,2),...
+    gmro_P_1u(:,2), gmro_P_2u(:,2), gmro_P_4u(:,2), gmro_P_6u(:,2),...
+    gmro_P_8u(:,2), gmro_P_10u(:,2), gmro_P_12u(:,2));
+cgg_P = horzcat(cgg_P_350n, cgg_P_500n(:,2),...
+    cgg_P_1u(:,2), cgg_P_2u(:,2), cgg_P_4u(:,2), cgg_P_6u(:,2),...
+    cgg_P_8u(:,2), cgg_P_10u(:,2), cgg_P_12u(:,2));
 
 % plot the characterization results
 figure
@@ -802,7 +896,7 @@ A_OL_CMFB_actual = (gmro_M13 * ro_M15) / (ro_M13 + ro_M15);
 
 
 %% area contrib of first-stage CT filter capacitor and signal-path caps
-area_sig = 2 .* C_in ./ cap_per_area;
+area_sig = 2 .* C_in ./ cap_per_area_mim;
 
 figure
 semilogx(f_swcap, area_limit_vec*(1e12));
@@ -832,7 +926,7 @@ C_2 = 1 ./ (2*pi*f_LP_AP.*R_2);
 C_passive = 2*C_1 + C_R1/2 + 2*C_R2 + C_2/2;
 
 % area
-area_passive = C_passive ./ cap_per_area;
+area_passive = C_passive ./ cap_per_area_mim;
 
 % plots
 semilogx(f_swcap, area_passive*(1e12));
@@ -853,7 +947,7 @@ C_3 = (2*pi*f_LP_AP) .* C_1 ./ f_swcap;
 C_firstorder = 2.*(C_1 + C_2 + C_3 + C_4);
 
 % area
-area_firstorder = C_firstorder ./ cap_per_area;
+area_firstorder = C_firstorder ./ cap_per_area_mim;
 
 % plots
 semilogx(f_swcap, area_firstorder*(1e12));
@@ -876,7 +970,7 @@ C_R1 = 1 ./ (R_1 .* f_swcap);
 C_biquad = 2.*(2.*(C_A + C_RA) + C_RB + C_R1);
 
 % area
-area_biquad = C_biquad ./ cap_per_area;
+area_biquad = C_biquad ./ cap_per_area_mim;
 
 % plots
 semilogx(f_swcap, area_biquad*(1e12));
@@ -897,7 +991,7 @@ C_2HQ = A_f .* C_BHQ;
 C_HQ = 2.*(2.*(C_AHQ + C_RAHQ) + C_BHQ + C_2HQ);
 
 % area
-area_HQ = C_HQ ./ cap_per_area;
+area_HQ = C_HQ ./ cap_per_area_mim;
 
 % plots
 semilogx(f_swcap, area_HQ*(1e12));
@@ -929,7 +1023,7 @@ C_AP = 1 ./ (R_A .* R_AP .* C_A .* omega_0.^2);
 C_biquad = 2.*(C_A + C_RA + C_AP + C_RAP + C_RB + C_R1);
 
 % area
-area_biquad = C_biquad ./ cap_per_area;
+area_biquad = C_biquad ./ cap_per_area_mim;
 
 % plots
 semilogx(f_swcap, area_biquad*(1e12));
