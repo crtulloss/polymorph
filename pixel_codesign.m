@@ -231,7 +231,7 @@ noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
 % and a 130nm/130nm device is 1.69*10^-14 m^2
 WL = logspace(-14,-8,1000);
 
-C_P = WL .* C_P_N;
+C_P = WL .* C_P_N3;
 
 % resulting actual closed-loop gain
 A_actual = C_in ./ (C_F + (C_F + C_in + C_P) ./ A_OL_target);
@@ -244,7 +244,7 @@ noise_OTA = noise_Vsq_target - noise_pseudoR_in;
 A_noise = (C_P + C_in + C_F) ./ C_in;
 
 % flicker noise
-noise_flicker = 2 .* K_flicker_N ./ C_ox ./ WL .* (A_noise).^2 ...
+noise_flicker = 2 .* K_flicker_N3 ./ C_ox3 ./ WL .* (A_noise).^2 ...
     .* log(f_LP_AP / f_HP_AP);
 
 noise_thermal = noise_OTA - noise_flicker;
@@ -255,7 +255,7 @@ noise_thermal = noise_OTA - noise_flicker;
 % brickwall filter at 10kHz, and this will be valid since we have used
 % appropriate anti-aliasing.
 % thus, ENBW is used here only to provide a safety margin.
-gm_req = 2 .* 4 .* k .* T .* gamma_W...
+gm_req = 2 .* 4 .* k .* T .* gamma_W3...
     ./ noise_thermal .* (A_noise).^2 .* ENBW .* excess;
 
 % first approx of mismatch: assume input pair dominates
@@ -584,8 +584,8 @@ gmid_PI = 15;
 gmid_SI = 10;
 
 % M1 specs determined from optimization above
-gm_min = 100e-6;
-WL_min = 3.8e-11;
+gm_min = 150e-6;
+WL_min = 6e-11;
 
 % ratio between main branch and output branch
 current_scale = 16;
@@ -624,19 +624,19 @@ V_swing_stage2 = V_DD - V_hr_SI - V_hr_WI;
 % M1: input pair (NMOS)
 
 % vectors to keep track of results for comparison
-W = zeros(num_lengths_N, 1);
-WL = zeros(num_lengths_N, 1);
-gmro = zeros(num_lengths_N, 1);
-gmid = zeros(num_lengths_N, 1);
+W = zeros(num_lengths_N3, 1);
+WL = zeros(num_lengths_N3, 1);
+gmro = zeros(num_lengths_N3, 1);
+gmid = zeros(num_lengths_N3, 1);
 
 % try each length
-for i = 1:num_lengths_N
+for i = 1:num_lengths_N3
     
     % column for gmid, gmro data
     col = 1 + i;
     
     % determine corresponding length
-    L_charac = L_N(i);
+    L_charac = L_N3(i);
     W_charac = L_charac * 2;
     
     for j = 1:points_per_length
@@ -644,13 +644,13 @@ for i = 1:num_lengths_N
         % go from SI to WI to get minimum required gmid
         point = points_per_length - j + 1;
         
-        gmid(i) = gmid_n(point, col);
+        gmid(i) = gmid_N(point, col);
         
         if (gmid(i) > gmid_WI)
             % found required gmid
             
             % determine corresponding current density for this length
-            ID_charac = gmid_n(point, 1);
+            ID_charac = gmid_N(point, 1);
             ID_density = ID_charac / W_charac;
             
             % determine actual ID required
@@ -662,7 +662,7 @@ for i = 1:num_lengths_N
             WL(i) = W(i) .* L_charac;
             
             % keep track of corresponding gmro
-            gmro(i) = gmro_n(point, col);
+            gmro(i) = gmro_N(point, col);
             break
         end      
     end
@@ -670,29 +670,29 @@ end
 
 % plot results for M1
 figure
-plot(L_N*1e6, W*1e6);
+plot(L_N3*1e6, W*1e6);
 xlabel('L (\mum)');
 ylabel('W (\mum)');
 title('M1: W vs. L');
 figure
-plot(L_N*1e6, WL*1e12);
+plot(L_N3*1e6, WL*1e12);
 xlabel('L (\mum)');
 ylabel('W ((\mum)^2)');
 title('M1: WL vs. L');
 figure
-plot(L_N*1e6, gmro);
+plot(L_N3*1e6, gmro);
 xlabel('L (\mum)');
 ylabel('g_mr_o');
 title('M1: g_mr_o vs. L');
 
 % pick L that gives us required WL for parasitics/flicker
-for i = 1:num_lengths_N
+for i = 1:num_lengths_N3
     WL_this = WL(i);
     
     if (WL_this > WL_min)
         % determine final dimensions
         W_M1 = W(i);
-        L_M1 = L_N(i);
+        L_M1 = L_N3(i);
         % determine final small signal params
         gmid_M1 = gmid(i);
         gmro_M1 = gmro(i);
