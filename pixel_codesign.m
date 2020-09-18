@@ -671,7 +671,10 @@ gmid_SI = 10;
 
 % M1 specs determined from optimization above
 gm_min = 150e-6;
-WL_min = 6e-11;
+WL_min = 8.6e-11;
+
+gm_min_inv = 100e-6;
+WL_min_inv = 3.4e-11;
 
 % ratio between main branch and output branch
 current_scale = 16;
@@ -704,6 +707,189 @@ V_hr_WI = 250e-3;
 V_swing_telecas = V_DD - 1*V_hr_SI - 4*V_hr_WI - V_R_degen;
 V_swing_foldcas = V_DD - 1*V_hr_SI - 3*V_hr_WI - V_R_degen;
 V_swing_stage2 = V_DD - V_hr_SI - V_hr_WI;
+V_swing_inverter = V_DD - 2*V_hr_SI - 2*V_hr_WI;
+
+%% transistor-level OTA design: action (inverter-based)
+
+% M1: input pair (NMOS)
+
+% vectors to keep track of results for comparison
+W = zeros(num_lengths_N3, 1);
+WL = zeros(num_lengths_N3, 1);
+gmro = zeros(num_lengths_N3, 1);
+gmid = zeros(num_lengths_N3, 1);
+
+% try each length
+for i = 1:num_lengths_N3
+    
+    % column for gmid, gmro data
+    col = 1 + i;
+    
+    % determine corresponding length
+    L_charac = L_N3(i);
+    W_charac = L_charac * 2;
+    
+    for j = 1:points_per_length
+        
+        % go from SI to WI to get minimum required gmid
+        point = points_per_length - j + 1;
+        
+        gmid(i) = gmid_N(point, col);
+        
+        if (gmid(i) > gmid_WI)
+            % found required gmid
+            
+            % determine corresponding current density for this length
+            ID_charac = gmid_N(point, 1);
+            ID_density = ID_charac / W_charac;
+            
+            % determine actual ID required
+            ID_req = gm_min_inv / gmid(i);
+            ID = 1e-6 * ceil(ID_req * 1e6);
+            
+            % determine actual W required
+            W(i) = ID / ID_density;
+            WL(i) = W(i) .* L_charac;
+            
+            % keep track of corresponding gmro
+            gmro(i) = gmro_N(point, col);
+            break
+        end      
+    end
+end
+
+% plot results for M1
+figure
+plot(L_N3*1e6, W*1e6);
+xlabel('L (\mum)');
+ylabel('W (\mum)');
+title('M1: W vs. L (inverter-based)');
+figure
+plot(L_N3*1e6, WL*1e12);
+xlabel('L (\mum)');
+ylabel('W ((\mum)^2)');
+title('M1: WL vs. L (inverter-based)');
+figure
+plot(L_N3*1e6, gmro);
+xlabel('L (\mum)');
+ylabel('g_mr_o');
+title('M1: g_mr_o vs. L (inverter-based)');
+
+% pick L that gives us required WL for parasitics/flicker
+for i = 1:num_lengths_N3
+    WL_this = WL(i);
+    
+    if (WL_this > WL_min_inv)
+        % determine final dimensions
+        W_inv_M1 = W(i);
+        L_inv_M1 = L_N3(i);
+        % determine final small signal params
+        gmid_inv_M1 = gmid(i);
+        gmro_inv_M1 = gmro(i);
+        break
+    end
+end
+
+% compute some currents
+ID_main_inv_N = ID;
+
+% compute M1 small signal params
+gm_inv_M1 = gmid_inv_M1 * ID_main_inv_N;
+ro_inv_M1 = gmro_inv_M1 / gm_inv_M1;
+
+% M3: input pair (PMOS)
+
+% vectors to keep track of results for comparison
+W = zeros(num_lengths_P3, 1);
+WL = zeros(num_lengths_P3, 1);
+gmro = zeros(num_lengths_P3, 1);
+gmid = zeros(num_lengths_P3, 1);
+
+% try each length
+for i = 1:num_lengths_P3
+    
+    % column for gmid, gmro data
+    col = 1 + i;
+    
+    % determine corresponding length
+    L_charac = L_P3(i);
+    W_charac = L_charac * 2;
+    
+    for j = 1:points_per_length
+        
+        % go from SI to WI to get minimum required gmid
+        point = points_per_length - j + 1;
+        
+        gmid(i) = gmid_P(point, col);
+        
+        if (gmid(i) > gmid_WI)
+            % found required gmid
+            
+            % determine corresponding current density for this length
+            ID_charac = gmid_P(point, 1);
+            ID_density = ID_charac / W_charac;
+            
+            % determine actual ID required
+            ID_req = gm_min_inv / gmid(i);
+            ID = 1e-6 * ceil(ID_req * 1e6);
+            
+            % determine actual W required
+            W(i) = ID / ID_density;
+            WL(i) = W(i) .* L_charac;
+            
+            % keep track of corresponding gmro
+            gmro(i) = gmro_P(point, col);
+            break
+        end      
+    end
+end
+
+% plot results for M3
+figure
+plot(L_P3*1e6, W*1e6);
+xlabel('L (\mum)');
+ylabel('W (\mum)');
+title('M3: W vs. L (inverter-based)');
+figure
+plot(L_P3*1e6, WL*1e12);
+xlabel('L (\mum)');
+ylabel('W ((\mum)^2)');
+title('M3: WL vs. L (inverter-based)');
+figure
+plot(L_P3*1e6, gmro);
+xlabel('L (\mum)');
+ylabel('g_mr_o');
+title('M3: g_mr_o vs. L (inverter-based)');
+
+% pick L that gives us required WL for parasitics/flicker
+for i = 1:num_lengths_P3
+    WL_this = WL(i);
+    
+    if (WL_this > WL_min_inv*K_ratio_3)
+        % determine final dimensions
+        W_inv_M3 = W(i);
+        L_inv_M3 = L_P3(i);
+        % determine final small signal params
+        gmid_inv_M3 = gmid(i);
+        gmro_inv_M3 = gmro(i);
+        break
+    end
+end
+
+% compute some currents
+ID_main_inv_P = ID;
+
+% compute M1 small signal params
+gm_inv_M3 = gmid_inv_M3 * ID_main_inv_P;
+ro_inv_M3 = gmro_inv_M3 / gm_inv_M3;
+
+% compute overall gain
+Gm_inv = gm_inv_M1 + gm_inv_M3;
+Rout_inv = 1 / (1/ro_inv_M1 + 1/ro_inv_M3);
+A_OL_inv = Gm_inv * Rout_inv;
+
+% compute input device areas
+input_area_inv = W_inv_M1 * L_inv_M1 + W_inv_M3 * L_inv_M3;
 
 %% transistor-level OTA design: action
 
