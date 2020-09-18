@@ -106,6 +106,7 @@ K_flicker_N = 1.24e-25;
 K_flicker_P = 1.98e-25;
 K_flicker_N3 = 1.55e-25;
 K_flicker_P3 = 4.27e-25;
+K_ratio_3 = K_flicker_P3 / K_flicker_N3;
 
 % mismatch coefficients
 % [Vm] and [m]
@@ -302,6 +303,91 @@ semilogx(WL, A_actual);
 xlabel('area_{diff} (m^2)');
 ylabel('A_{actual}');
 title('Closed-Loop Gain due to C_P');
+
+%% begin OTA design: sweep WL (inverter-based)
+
+% WL sweep:
+% for the inverter-based option, this is the WL for the NMOS device
+% in order to account for the difference in flicker noise coefficients,
+% the PMOS device area will be scaled by K_flicker_P / K_flicker_N
+
+C_P = WL .* (C_P_N3 + C_P_P3 * K_ratio_3);
+
+% resulting actual closed-loop gain
+A_actual = C_in ./ (C_F + (C_F + C_in + C_P) ./ A_OL_target);
+noise_pseudoR_in = noise_pseudoR ./ (A_actual.^2);
+
+% noise budget
+noise_OTA = noise_Vsq_target - noise_pseudoR_in;
+
+% noise gain
+A_noise = (C_P + C_in + C_F) ./ C_in;
+
+% for the inverter-based design, there are 4 devices contributing noise,
+% but the contribution of each is reduced by a factor of 4 due to the
+% double gm
+
+% flicker noise
+noise_flicker = K_flicker_N3 ./ C_ox3 ./ WL .* (A_noise).^2 ...
+    .* log(f_LP_AP / f_HP_AP);
+
+noise_thermal = noise_OTA - noise_flicker;
+
+% thermal noise
+% NOTE: we only care about thermal noise in the signal band (to 10kHz)
+% technically, ENBW is not correct here because we can do a software
+% brickwall filter at 10kHz, and this will be valid since we have used
+% appropriate anti-aliasing.
+% thus, ENBW is used here only to provide a safety margin.
+gm_req = 4 .* k .* T .* gamma_W3...
+    ./ noise_thermal .* (A_noise).^2 .* ENBW .* excess;
+
+% first approx of mismatch: assume input pair dominates
+sigma_Vth_1 = A_VT ./ sqrt(WL);
+V_os_3sigma = sigma_Vth_1 .* 3;
+
+%% plots from WL sizing choice (inverter-based)
+
+% noise breakdown
+figure
+semilogx(WL, (noise_Vrms_target*1e6).*ones(size(WL)));
+hold on
+semilogx(WL, sqrt(noise_pseudoR_in) .* 1e6);
+semilogx(WL, sqrt(noise_OTA) .* 1e6);
+semilogx(WL, sqrt(noise_flicker) .* 1e6);
+semilogx(WL, sqrt(noise_thermal) .* 1e6);
+semilogx(WL, sqrt(noise_flicker) ./ (A_noise).^2 .* 1e6);
+semilogx(WL, sqrt(noise_thermal) ./ (A_noise).^2 .* 1e6);
+xlabel('area_{diff} (m^2)');
+ylabel('V_{n-RMS} (\muV)');
+axis([1e-14 1e-8 0 10]);
+legend('Budget', 'pseudoR', 'OTA', 'Flicker', 'Thermal',...
+    'Flicker/A_{noise}', 'Thermal/A_{noise}');
+title('Contributors to LNA Noise: Inverter-Based Option');
+
+% mismatch
+figure
+semilogx(WL, V_os_3sigma .* 1e3);
+xlabel('area_{diff} (m^2)');
+ylabel('V_{OS} (mV)');
+title('3\sigma V_{OS}');
+
+% gm requirement
+figure
+semilogx(WL, gm_req.*(1e6));
+xlabel('area_{diff} (m^2)');
+ylabel('g_m (\muS)');
+axis([1e-14 1e-8 0 500]);
+title('g_m Requirement: Inverter-Based Option');
+
+% closed-loop gain
+figure
+semilogx(WL, A_actual);
+xlabel('area_{diff} (m^2)');
+ylabel('A_{actual}');
+title('Closed-Loop Gain due to C_P: Inverter-Based Option');
+
+
 
 %% gm/id, gmro characterization
 
