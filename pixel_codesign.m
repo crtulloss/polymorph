@@ -110,13 +110,17 @@ K_ratio_3 = K_flicker_P3 / K_flicker_N3;
 
 % mismatch coefficients
 % [Vm] and [m]
-A_VT = 10e-9;
-A_beta = 0.013e-6;
+A_VT = 13.5e-9;
+A_beta = 28.4e-9;
+A_VT3 = 23e-9;
+A_beta3 = 45e-9;
 
 % noise factor gamma (often quoted as 2/3)
 gamma_W = 1;
 gamma_S = 2/3;
-gamma_W3 = 1.5;
+gamma_W3 = 0.7;
+gamma_W3N = 0.6;
+gamma_W3P = 1;
 
 % estimates for device area
 L_diff = 200e-9;
@@ -260,7 +264,7 @@ gm_req = 2 .* 4 .* k .* T .* gamma_W3...
     ./ noise_thermal .* (A_noise).^2 .* ENBW .* excess;
 
 % first approx of mismatch: assume input pair dominates
-sigma_Vth_1 = A_VT ./ sqrt(WL);
+sigma_Vth_1 = A_VT3 ./ sqrt(WL);
 V_os_3sigma = sigma_Vth_1 .* 3;
 
 %% plots from WL sizing choice
@@ -339,11 +343,11 @@ noise_thermal = noise_OTA - noise_flicker;
 % brickwall filter at 10kHz, and this will be valid since we have used
 % appropriate anti-aliasing.
 % thus, ENBW is used here only to provide a safety margin.
-gm_req = 4 .* k .* T .* gamma_W3...
+gm_req = 4 .* k .* T .* (gamma_W3N+gamma_W3P)/2 ...
     ./ noise_thermal .* (A_noise).^2 .* ENBW .* excess;
 
 % first approx of mismatch: assume input pair dominates
-sigma_Vth_1 = A_VT ./ sqrt(WL);
+sigma_Vth_1 = A_VT3 ./ sqrt(WL);
 V_os_3sigma = sigma_Vth_1 .* 3;
 
 %% plots from WL sizing choice (inverter-based)
@@ -670,11 +674,11 @@ gmid_PI = 15;
 gmid_SI = 10;
 
 % M1 specs determined from optimization above
-gm_min = 150e-6;
-WL_min = 8.6e-11;
+gm_min = 100e-6;
+WL_min = 3.4e-11;
 
-gm_min_inv = 100e-6;
-WL_min_inv = 3.4e-11;
+gm_min_inv = 50e-6;
+WL_min_inv = 3.2e-11;
 
 % ratio between main branch and output branch
 current_scale = 16;
@@ -736,7 +740,7 @@ for i = 1:num_lengths_N3
         
         gmid(i) = gmid_N(point, col);
         
-        if (gmid(i) > gmid_WI)
+        if (gmid(i) > gmid_MI)
             % found required gmid
             
             % determine corresponding current density for this length
@@ -822,7 +826,7 @@ for i = 1:num_lengths_P3
         
         gmid(i) = gmid_P(point, col);
         
-        if (gmid(i) > gmid_WI)
+        if (gmid(i) > gmid_MI)
             % found required gmid
             
             % determine corresponding current density for this length
@@ -1094,7 +1098,7 @@ noise_final_OTA = noise_final_A1;
 noise_final_OTA_V = sqrt(noise_final_OTA);
 
 % offset: it can be shown that all contributions are neglig except input
-sigma_Vth_1_final = A_VT / sqrt(W_M1 * L_M1);
+sigma_Vth_1_final = A_VT3 / sqrt(W_M1 * L_M1);
 V_os_3sigma_final = sigma_Vth_1_final * 3;
 
 % settling - need to satisfy swcap settling assumption
