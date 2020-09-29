@@ -148,17 +148,26 @@ f_pseudo = 1./(2.*pi.*pseudoR.*C_F);
 ratio = f_HP_AP ./ f_pseudo;
 reduc_factor = (2/pi./((ratio).^2 - 1)) .* ...
     (ratio*pi/4 - pi/2 + atan(ratio));
+% before the filter, we will see more noise. how much more?
+% don't apply the HP filter, but integrate 300Hz to infinity:
+% this is the corresponding reduction factor
+reduc_factor_prefilt = (1 - 2/pi .* atan(ratio));
 % resulting noise due to 2 pseudoR
 noise_pseudoR = 2 .* k .* T ./ C_F .* reduc_factor;
+noise_pseudoR_prefilt = 2 .* k .* T ./ C_F .* reduc_factor_prefilt;
 % input-refer - note that this uses ideal gain
 noise_pseudoR_in = noise_pseudoR ./ (A_target.^2);
+noise_pseudoR_in_prefilt = noise_pseudoR_prefilt ./ (A_target.^2);
 
 % noise due to pseudoR as a function of Cin
 figure
+semilogx(pseudoR/1e9, sqrt(noise_pseudoR_in_prefilt) .* 1e6);
+hold on
 semilogx(pseudoR/1e9, sqrt(noise_pseudoR_in) .* 1e6);
 xlabel('R_{pseud} (G\Omega)');
 ylabel('V_{n-in-RMS} (\muV)');
 title('pseudoR Noise vs. pseudoR');
+legend('Amp Output', 'Filter Output');
 
 %% closed-loop amp design: sweep Cin
 
@@ -1103,33 +1112,41 @@ V_os_3sigma_final = sigma_Vth_1_final * 3;
 
 % settling - need to satisfy swcap settling assumption
 
+% settling limit
+T_settle_limit = (1 ./ f_swcap) * settling_frac;
+
+% switch settling
 % assume min size cap for C_RA
 C_RA = 10e-15;
 % input cap size
 C_R1 = C_RA * A_f / Q;
-
-% settling limit
-T_settle_limit = (1 ./ f_swcap) * settling_frac;
-
 % assume switch resistance - settling through this
 R_sw = 14e3;
 T_settle_sw = R_sw * C_R1 * settling_TCs;
 
+% OTA settling
+% choose OTA load cap for CT lowpass pole (from GBW)
+f_LPCT = f_swcap ./ 10;
+C_L = Gm_actual ./ (2*pi .* f_LPCT .* A_target);
+% calculate closed loop output R
+% loop gain = A_OL * beta and beta ~= 1/A_target
 loop_gain_approx = A_OL_actual / A_target;
-T_settle_OTA = (Rout_actual / loop_gain_approx) * C_R1 * settling_TCs;
+Rout_closed = Rout_actual / loop_gain_approx;
+% settling time if OTA driving
+T_settle_OTA = Rout_closed * C_L * settling_TCs;
 
 T_settle_OTA_vec = T_settle_OTA .* ones(size(f_swcap));
 T_settle_sw_vec = T_settle_sw .* ones(size(f_swcap));
 
 figure
-semilogx(f_swcap, T_settle_limit*1e6);
+loglog(f_swcap, T_settle_limit);
 hold on
-semilogx(f_swcap, T_settle_sw_vec*1e6);
-semilogx(f_swcap, T_settle_OTA_vec*1e6);
+loglog(f_swcap, T_settle_sw_vec);
+loglog(f_swcap, T_settle_OTA_vec);
 xlabel('f_{swcap} (Hz)');
-ylabel('n\tau (\mus)');
+ylabel('n\tau (s)');
 title('Amp/Filter Settling Time vs. Sw Cap Frequency');
-legend('Limit', 'Switch Settling', 'OTA 2nd Stage Settling');
+legend('Limit', 'Switch Settling', 'OTA Settling');
 
 % fold node resistance - for comparison with output R to determine dom pole
 R_fold = 1/(Gs7 + 1/r_inbranch + 1/r_top);
@@ -1178,9 +1195,6 @@ figure
 semilogx(f_swcap, area_limit_vec*(1e12));
 hold on
 semilogx(f_swcap, area_sig * ones(num_points, 1)*(1e12));
-
-f_LPCT = f_swcap ./ 10;
-C_L = Gm_actual ./ (2*pi .* f_LPCT .* A_target);
 
 area_CT = C_L ./ cap_per_area_mos + area_sig;
 
@@ -1309,12 +1323,12 @@ semilogx(f_swcap, (area_biquad+area_CT)*(1e12));
 xlabel('f_{swcap} (Hz)');
 ylabel('Capacitor Area (\mum)^2');
 title('Capacitor Area vs. Sw Cap Frequency');
-legend('Limit', 'LNA Signal Path', 'CT',...
-    'Passive', 'CT+Passive',...
-    'FirstOrder', 'CT+FirstOrder',...
-    'TTBiquad', 'CT+TTBiquad',...
-    'HQBiquad', 'CT+HQBiquad',...
-    'TTBSwing', 'CT+TTBSwing');
+legend('Limit', 'LNA Signal Path', 'Signal+CT',...
+    'Passive', 'Signal+CT+Passive',...
+    'FirstOrder', 'Signal+CT+FirstOrder',...
+    'TTBiquad', 'Signal+CT+TTBiquad',...
+    'HQBiquad', 'Signal+CT+HQBiquad',...
+    'TTBSwing', 'Signal+CT+TTBSwing');
 axis([1e5, 1e7, 0, 25000]);
 
 %% further analysis of TT topology
