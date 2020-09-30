@@ -53,6 +53,10 @@ A_OL_target = 1e3;
 A_f = 1;
 A_LP = 5/3;
 
+% CM nonideality
+CM_error = 0.005;
+CM_rel = 1-CM_error;
+
 % BPF nonidealities
 gain_error = 0.01;
 % stopband is defined as the point where 20dB rolloff stops and
@@ -1093,6 +1097,75 @@ fold_split = Gs7 / (Gs7 + Gd5);
 Gm_actual = gm_M1 * input_split * fold_split;
 
 A_OL_actual = Rout_actual * Gm_actual;
+
+% size tail devices based on output branch devices
+
+% MT1: tail device (NMOS)
+[W, gmid, gmro] = size_M(L_N, gmid_n, gmro_n, gmid_PI, 0, 2*ID_main,...
+    num_lengths_N, points_per_length);
+% pick L that matches M11
+for i = 1:num_lengths_N3
+    L_this = L_N(i);
+    
+    if (L_this == L_M11)
+        % determine final dimensions
+        W_MT1 = W(i);
+        L_MT1 = L_N(i);
+        % determine final small signal params
+        gmid_MT1 = gmid(i);
+        gmro_MT1 = gmro(i);
+        break
+    end
+end
+% compute MT1 small signal params (necessary for CMFB)
+gm_MT1 = gmid_MT1 * 2*ID_main;
+ro_MT1 = gmro_MT1 / gm_MT1;
+
+% MT2: tail cascode device (NMOS)
+[W, gmid, gmro] = size_M(L_N, gmid_n, gmro_n, gmid_MI, 1, 2*ID_main,...
+    num_lengths_N, points_per_length);
+% pick L that matches M9
+for i = 1:num_lengths_N3
+    L_this = L_N(i);
+    
+    if (L_this == L_M9)
+        % determine final dimensions
+        W_MT2 = W(i);
+        L_MT2 = L_N(i);
+        % determine final small signal params
+        gmid_MT2 = gmid(i);
+        gmro_MT2 = gmro(i);
+        break
+    end
+end
+% compute MT2 small signal params (necessary for CMFB)
+gm_MT2 = gmid_MT2 * 2*ID_main;
+ro_MT2 = gmro_MT2 / gm_MT2;
+
+%% CMFB auxiliary amp
+
+% calculate relevant conductances
+Gd5_6 = 2*Gd5;
+Gs7_8 = 2*Gs7;
+Gs3_4 = 2*Gs3;
+Gs1_2 = (2*gm_M1 + 2/ro_M1) / (1 + 2 / (ro_M1 * Gs3_4));
+GsT2 = (gm_MT2 + 1/ro_MT2) / (1 + 1 / (ro_MT2 * Gs1_2));
+GdT2 = 1 / (ro_MT2 * (1 + ro_MT1 / ro_MT2 + gm_MT2 * ro_MT1));
+
+% calculate relevant splits
+tail_split_1 = (GsT2 * ro_MT1) / (1 + GsT2 * ro_MT1);
+tail_split_2 = Gs1_2 / (Gs1_2 + GdT2);
+overall_split = tail_split_1 * tail_split_2 * input_split * fold_split;
+
+% calculate required CM loop gain
+CM_loop_gain_req = 1/((1 / CM_rel) - 1);
+gmT1b_ACM = CM_loop_gain_req / overall_split / (Rout_actual / 2);
+
+% assume 1/4 of the tail device will be dedicated to CMFB
+gm_MT1b = gm_MT1 / 4;
+%calculate required CM amp gain
+A_CM_req = gmT1b_ACM / gm_MT1b;
+
 
 %% post-design OTA characterization
 
